@@ -1,0 +1,4 @@
+klanten/
+__pycache__/
+*.pyc
+/tmp/

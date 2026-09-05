@@ -1,0 +1,27 @@
+{
+ "toelichting": "Volgorde waarin de weekronde branches afwerkt. Elke ronde is heel Nederland; als alle bedrijven van een branche bekeken zijn, gaat de agent door naar de volgende. Regio's uit oogst.py (bijv. 'Drenthe') kunnen ook, dan wordt de voorraad daarop gefilterd.",
+ "ronden": [
+  {"branche": "hoveniers", "regio": "Nederland"},
+  {"branche": "tuincentra", "regio": "Nederland"},
+  {"branche": "schilders", "regio": "Nederland"},
+  {"branche": "dakdekkers", "regio": "Nederland"},
+  {"branche": "timmerbedrijven", "regio": "Nederland"},
+  {"branche": "installateurs", "regio": "Nederland"},
+  {"branche": "stukadoors", "regio": "Nederland"},
+  {"branche": "autogarages", "regio": "Nederland"},
+  {"branche": "kappers", "regio": "Nederland"},
+  {"branche": "fysiotherapeuten", "regio": "Nederland"},
+  {"branche": "rijscholen", "regio": "Nederland"},
+  {"branche": "makelaars", "regio": "Nederland"},
+  {"branche": "bakkers", "regio": "Nederland"},
+  {"branche": "bloemisten", "regio": "Nederland"},
+  {"branche": "dierenartsen", "regio": "Nederland"},
+  {"branche": "tandartsen", "regio": "Nederland"},
+  {"branche": "schoonheidssalons", "regio": "Nederland"},
+  {"branche": "fietsenmakers", "regio": "Nederland"},
+  {"branche": "slagers", "regio": "Nederland"},
+  {"branche": "campings", "regio": "Nederland"},
+  {"branche": "sportscholen", "regio": "Nederland"},
+  {"branche": "restaurants", "regio": "Nederland"}
+ ]
+}
