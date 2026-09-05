@@ -99,10 +99,10 @@ def kop_html(c, m, pagina, afzender):
     tel = c["telefoon"][0] if c.get("telefoon") else None
     logo = m.get("logo")
     if logo:
-        merk = f'<a class="merk" href="index.html"><img src="{E(logo["bestand"])}" alt="Logo van {E(naam)}" width="{int(180 * logo["w"] / max(logo["w"], 1)) if logo["w"] <= 180 else 180}" height="{int(logo["h"] * (180 / logo["w"])) if logo["w"] > 180 else logo["h"]}" decoding="async"></a>'
+        merk = f'<a class="merk" href="./"><img src="{E(logo["bestand"])}" alt="Logo van {E(naam)}" width="{int(180 * logo["w"] / max(logo["w"], 1)) if logo["w"] <= 180 else 180}" height="{int(logo["h"] * (180 / logo["w"])) if logo["w"] > 180 else logo["h"]}" decoding="async"></a>'
     else:
-        merk = f'<a class="merk" href="index.html"><b>{E(naam)}</b></a>'
-    knop = f'<a class="knop" href="tel:{E(tel)}">{E(tel_mooi(tel))}</a>' if tel else '<a class="knop" href="contact.html">Contact</a>'
+        merk = f'<a class="merk" href="./"><b>{E(naam)}</b></a>'
+    knop = f'<a class="knop" href="tel:{E(tel)}">{E(tel_mooi(tel))}</a>' if tel else '<a class="knop" href="contact">Contact</a>'
     def item(href, tekst, key):
         cur = ' aria-current="page"' if pagina == key else ""
         return f'<a href="{href}"{cur}>{tekst}</a>'
@@ -110,7 +110,7 @@ def kop_html(c, m, pagina, afzender):
 <div class="melding"><div class="wrap"><span>Voorbeeldontwerp voor {E(naam)} — gemaakt met tekst en foto's van de huidige website. Niet de officiële site.</span><span>· Voorstel van {E(afzender)}</span></div></div>
 <header class="top"><div class="wrap">
   {merk}
-  <nav class="hoofd" aria-label="Hoofdmenu">{item("index.html", "Home", "index")}{item("diensten.html", "Diensten", "diensten")}{item("contact.html", "Contact", "contact")}{knop}</nav>
+  <nav class="hoofd" aria-label="Hoofdmenu">{item("./", "Home", "index")}{item("diensten", "Diensten", "diensten")}{item("contact", "Contact", "contact")}{knop}</nav>
 </div></header>
 <main id="inhoud">"""
 
@@ -127,7 +127,7 @@ def voet_html(c):
   <div class="wrap">
     <div><h2>{E(naam)}</h2>{adres}{f'<p>KvK {E(c["kvk"])}</p>' if c.get("kvk") else ""}</div>
     <div><h2>Contact</h2>{f'<p><a href="tel:{E(tel)}">{E(tel_mooi(tel))}</a></p>' if tel else ""}{f'<p><a href="mailto:{E(mail)}">{E(mail)}</a></p>' if mail else ""}{soc}</div>
-    <div><h2>Pagina's</h2><p><a href="index.html">Home</a></p><p><a href="diensten.html">Diensten</a></p><p><a href="contact.html">Contact</a></p><p><a href="privacy.html">Privacy</a></p></div>
+    <div><h2>Pagina's</h2><p><a href="./">Home</a></p><p><a href="diensten">Diensten</a></p><p><a href="contact">Contact</a></p><p><a href="privacy">Privacy</a></p></div>
   </div>
   <div class="wrap"><p class="klein">© {date.today().year} {E(naam)} — voorbeeldontwerp, geen officiële website.</p></div>
 </footer>"""
@@ -180,7 +180,7 @@ def bouw(map_klant, afzender="Tim Kappers", log=print):
     # ---------- index ----------
     hero = m.get("hero")
     hero_img = f'<img src="{E(hero["bestand"])}" width="{hero["w"]}" height="{hero["h"]}" alt="" fetchpriority="high" decoding="async">' if hero else ""
-    acties = f'<a class="knop knop--licht" href="contact.html">{E(t["knop"])}</a>' + (f'<a class="knop" href="tel:{E(tel)}">Bel {E(tel_mooi(tel))}</a>' if tel else "")
+    acties = f'<a class="knop knop--licht" href="contact">{E(t["knop"])}</a>' + (f'<a class="knop" href="tel:{E(tel)}">Bel {E(tel_mooi(tel))}</a>' if tel else "")
     kaarten = "".join(f'<article class="kaart"><h3>{E(n)}</h3><p>{E(o)}</p></article>' for n, o, _ in diensten[:3])
     werk = ""
     if m.get("projecten"):
@@ -194,11 +194,11 @@ def bouw(map_klant, afzender="Tim Kappers", log=print):
     body = f"""
 <div class="hero">{hero_img}<div class="wrap"><h1>{E(kop)}</h1><p>{E(sub)}</p><div class="acties">{acties}</div></div></div>
 <section class="vel"><div class="wrap"><div class="kop"><h2>Wat we doen</h2><p>{E(t["diensten_intro"])}</p></div>
-<div class="rooster">{kaarten}</div><p style="margin-top:2rem"><a class="knop knop--rand" href="diensten.html">Alle diensten bekijken</a></p></div></section>
+<div class="rooster">{kaarten}</div><p style="margin-top:2rem"><a class="knop knop--rand" href="diensten">Alle diensten bekijken</a></p></div></section>
 {werk}
 <section class="vel"><div class="wrap"><div class="kop"><h2>Waarom {E(naam)}</h2></div><div class="rooster">{waarom}</div></div></section>
 {galerij}
-<section class="strook"><div class="wrap"><div><h2>{E(t["cta"][0])}</h2><p>{E(t["cta"][1])}</p></div><div class="acties"><a class="knop knop--licht" href="contact.html">Neem contact op</a></div></div></section>"""
+<section class="strook"><div class="wrap"><div><h2>{E(t["cta"][0])}</h2><p>{E(t["cta"][1])}</p></div><div class="acties"><a class="knop knop--licht" href="contact">Neem contact op</a></div></div></section>"""
     schema = ""
     if a.get("plaats"):
         s = {"@context": "https://schema.org", "@type": "LocalBusiness", "name": naam,
@@ -214,7 +214,7 @@ def bouw(map_klant, afzender="Tim Kappers", log=print):
     body = f"""
 <section><div class="wrap"><div class="kop"><h1>Diensten</h1><p>{E(naam)}{" werkt in " + E(plaats) + " en omgeving." if plaats else "."} {E(t["diensten_intro"])}</p></div>
 <div class="rooster">{kaarten}</div>
-<p style="margin-top:2.5rem"><a class="knop" href="contact.html">{E(t["knop"])}</a></p></div></section>"""
+<p style="margin-top:2.5rem"><a class="knop" href="contact">{E(t["knop"])}</a></p></div></section>"""
     open(os.path.join(web, "diensten.html"), "w", encoding="utf-8").write(
         pagina(c, m, f"Diensten — {naam}", f"Wat {naam} voor u kan doen.", body, "diensten", afzender))
 
@@ -244,7 +244,7 @@ def bouw(map_klant, afzender="Tim Kappers", log=print):
       <div class="honing" aria-hidden="true"><label for="v-website">Website</label><input id="v-website" name="website" tabindex="-1" autocomplete="off"></div>
       <div><button class="knop" type="submit">Versturen</button></div>
       <p id="uitkomst" role="status" class="notitie" hidden></p>
-      <p class="notitie" style="font-size:.85rem">{avg} Zie ook de <a href="privacy.html">privacyverklaring</a>.</p>
+      <p class="notitie" style="font-size:.85rem">{avg} Zie ook de <a href="privacy">privacyverklaring</a>.</p>
     </form>
     {"" if endpoint else '<p class="notitie" style="margin-top:1rem">Dit is een voorbeeldpagina. Het formulier controleert de invoer wel, maar verstuurt nog niets — daar hoort een mailkoppeling achter.</p>'}
   </div>
@@ -282,7 +282,7 @@ def bouw(map_klant, afzender="Tim Kappers", log=print):
 <p class="notitie">Dit is een voorbeeldtekst bij een voorbeeldontwerp; de definitieve verklaring wordt met de ondernemer afgestemd.</p>
 </div></section>"""
     open(os.path.join(web, "privacy.html"), "w", encoding="utf-8").write(pagina(c, m, f"Privacy — {naam}", "Privacyverklaring.", body, "privacy", afzender))
-    body = '<section><div class="wrap tekst"><h1>Pagina niet gevonden</h1><p>Deze pagina bestaat niet (meer). <a href="index.html">Terug naar de homepage</a>.</p></div></section>'
+    body = '<section><div class="wrap tekst"><h1>Pagina niet gevonden</h1><p>Deze pagina bestaat niet (meer). <a href="./">Terug naar de homepage</a>.</p></div></section>'
     open(os.path.join(web, "404.html"), "w", encoding="utf-8").write(pagina(c, m, f"Niet gevonden — {naam}", "Pagina niet gevonden.", body, "404", afzender))
     open(os.path.join(web, "robots.txt"), "w").write("User-agent: *\nDisallow: /\n")
 

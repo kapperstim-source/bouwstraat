@@ -15,8 +15,15 @@ AXE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vendor", "axe.mi
 
 
 class Stil(SimpleHTTPRequestHandler):
+    """Zwijgt, en doet wat Cloudflare Pages doet: /diensten → diensten.html."""
     def log_message(self, *a):
         pass
+
+    def translate_path(self, path):
+        p = super().translate_path(path)
+        if not os.path.exists(p) and "." not in os.path.basename(p) and os.path.exists(p + ".html"):
+            return p + ".html"
+        return p
 
 
 def server(map_web):
@@ -59,7 +66,12 @@ def verifieer(map_klant, log=print):
                         if not h or h.startswith(("#", "mailto:", "tel:", "http", "javascript:")):
                             continue
                         doel = urllib.parse.urljoin(url, h).split("#")[0]
-                        pad = os.path.join(web, urllib.parse.unquote(doel.replace(basis + "/", "")))
+                        rel = urllib.parse.unquote(doel.replace(basis + "/", "").replace(basis, ""))
+                        pad = os.path.join(web, rel) if rel else os.path.join(web, "index.html")
+                        if os.path.isdir(pad):
+                            pad = os.path.join(pad, "index.html")
+                        if not os.path.exists(pad) and os.path.exists(pad + ".html"):
+                            pad = pad + ".html"
                         if not os.path.exists(pad):
                             uit["kapotte_links"].append(f"{pagina} → {h}")
                     imgs = page.evaluate("Array.from(document.images).filter(i => !i.complete || i.naturalWidth === 0).map(i => i.getAttribute('src'))")
