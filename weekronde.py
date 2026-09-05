@@ -16,7 +16,7 @@ een demo (extract → images → build → verify → deploy) en een mailtekst, 
 De agent maakt daarna per concept een Gmail-concept aan. Verzenden doet Tim.
 Zonder --deploy krijgen de demo's een tijdelijke placeholder-URL (alleen voor testen).
 """
-import argparse, json, os, re, sys, time, traceback
+import argparse, json, os, re, signal, sys, time, traceback
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date, datetime
 import oogst, sitescan, run
@@ -25,8 +25,23 @@ VANDAAG = date.today().isoformat()
 MIN_SCORE = 40           # 'warm' en hoger; heet is 55+
 
 
+LOGBESTAND = None
+
+
 def log(s):
-    print(f"[{datetime.now():%H:%M:%S}] {s}", file=sys.stderr, flush=True)
+    regel = f"[{datetime.now():%H:%M:%S}] {s}"
+    print(regel, file=sys.stderr, flush=True)
+    if LOGBESTAND:
+        with open(LOGBESTAND, "a", encoding="utf-8") as f:
+            f.write(regel + "\n")
+
+
+class Waakhond(Exception):
+    pass
+
+
+def _alarm(signum, frame):
+    raise Waakhond("tijdslimiet van de hele ronde bereikt")
 
 
 def laad(pad, standaard):
@@ -99,8 +114,16 @@ def scan_alles(bedrijven, workers=8):
 
 
 def ronde(a):
+    global LOGBESTAND
     t_start = time.time()
     os.makedirs(a.werkmap, exist_ok=True)
+    LOGBESTAND = os.path.join(a.werkmap, "log.txt")
+    open(LOGBESTAND, "w").close()
+    # waakhond: wat er ook hangt (netwerk, browser, wrangler), na de tijdslimiet + 2 min
+    # breken we af en schrijven we weg wat er is
+    signal.signal(signal.SIGALRM, _alarm)
+    signal.alarm(a.tijdslimiet + 120)
+    log(f"start weekronde (limiet {a.tijdslimiet} s, aantal {a.aantal}, deploy {a.deploy})")
     adm = laad(a.administratie, {"stand": {"kalender_index": 0}, "prospects": {}, "overgeslagen": {}, "afgemeld": []})
     adm.setdefault("stand", {}).setdefault("kalender_index", 0)
     adm.setdefault("prospects", {}); adm.setdefault("overgeslagen", {}); adm.setdefault("afgemeld", [])
@@ -116,6 +139,8 @@ def ronde(a):
     idx = adm["stand"]["kalender_index"] % max(len(ronden), 1)
     bekeken = 0
     while len(kandidaten) < a.aantal * 2 and bekeken < min(3, len(ronden)):
+        if time.time() - t_start > a.tijdslimiet * 0.6:
+            log("meer dan 60% van de tijd op aan zoeken/scannen; door naar bouwen"); break
         r = ronden[idx]
         log(f"ronde: {r['branche']} / {r.get('regio', 'Nederland')}")
         lijst = None
@@ -144,7 +169,10 @@ def ronde(a):
             adm["stand"]["kalender_index"] = idx
             continue
         nieuw = nieuw[: a.max_scan]
-        scans = scan_alles(nieuw)
+        try:
+            scans = scan_alles(nieuw)
+        except Waakhond:
+            log("waakhond: afgebroken tijdens het scannen"); verslag.append("- waakhond: tijdslimiet bereikt tijdens het scannen"); break
         goed = kies_kandidaten(scans, adm, a.aantal)
         for s in scans:
             if s not in goed:
@@ -175,6 +203,10 @@ def ronde(a):
         try:
             uit = run.alles(s.get("eind_url") or s["url"], map_klant, s["branche"], doe_deploy=a.deploy, project=project,
                             prijs=prijs, maand=maand, log=log, scan=s, naam_hint=s.get("naam_osm"))
+        except Waakhond:
+            log("waakhond: afgebroken tijdens het bouwen; wat klaar is wordt weggeschreven")
+            verslag.append("- waakhond: tijdslimiet bereikt tijdens het bouwen")
+            break
         except Exception as e:
             log(f"  mislukt: {e}")
             mislukt.append((s["domein"], str(e)[:120]))
@@ -200,6 +232,7 @@ def ronde(a):
         adm["prospects"][s["domein"]] = {"naam": c["naam"], "email": mm.get("aan"), "branche": s["branche"], "score": s["score"],
                                         "status": "concept", "datum": VANDAAG, "demo": uit["demo"], "onderwerp": mm["onderwerp"]}
     # 3. wegschrijven
+    signal.alarm(0)
     adm["stand"]["laatste_ronde"] = VANDAAG
     adm["stand"]["aantal_ronden"] = adm["stand"].get("aantal_ronden", 0) + 1
     json.dump(adm, open(os.path.join(a.werkmap, "administratie.json"), "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))

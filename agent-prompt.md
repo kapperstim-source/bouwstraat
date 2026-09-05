@@ -27,15 +27,15 @@ EOF
 Geen threads gevonden? Dan niets doen.
 
 STAP 4 — de ronde draaien
-Bash (kan 10 tot 25 minuten duren; gebruik een timeout van 1800000 ms):
-cd /tmp/bouwstraat && export CLOUDFLARE_API_TOKEN="$(python3 -c "import json;print(json.load(open('config.json'))['cloudflare_api_token'])")" && export CLOUDFLARE_ACCOUNT_ID="$(python3 -c "import json;print(json.load(open('config.json'))['cloudflare_account_id'])")" && python3 weekronde.py --werkmap /tmp/ronde --administratie administratie.json --kalender kalender.json --config config.json --voorraad voorraad --aantal 10 --deploy --tijdslimiet 1500 2>&1 | tail -60
-Lees daarna /tmp/ronde/verslag.md en /tmp/ronde/concepten.json.
+Bash (kan 10 tot 25 minuten duren; gebruik een timeout van 1800000 ms). Het commando is precies dit, in één keer:
+cd /tmp/bouwstraat && mkdir -p /tmp/ronde && export CLOUDFLARE_API_TOKEN="$(python3 -c "import json;print(json.load(open('config.json'))['cloudflare_api_token'])")" && export CLOUDFLARE_ACCOUNT_ID="$(python3 -c "import json;print(json.load(open('config.json'))['cloudflare_account_id'])")" && timeout -k 30 1560 python3 weekronde.py --werkmap /tmp/ronde --administratie administratie.json --kalender kalender.json --config config.json --voorraad voorraad --aantal 10 --deploy --tijdslimiet 1380 > /tmp/ronde/uitvoer.txt 2>&1; echo "exit $?"; tail -40 /tmp/ronde/uitvoer.txt
+Het script houdt zelf een logboek bij in /tmp/ronde/log.txt en stopt zichzelf na de tijdslimiet; de `timeout` ervoor is de noodrem. Lees daarna /tmp/ronde/verslag.md en /tmp/ronde/concepten.json. Bestaat concepten.json niet of is de exitcode niet 0, lees dan /tmp/ronde/log.txt en /tmp/ronde/uitvoer.txt en zet die twee bestanden in Drive (create_file, text/plain, disableConversionToGoogleType true, parentId = map-id, titels `log-<datum>.txt` en `uitvoer-<datum>.txt`), zodat het na te kijken is.
 Staat er in de aanroep van deze taak een regel die begint met "TESTMODUS", volg die dan (bijvoorbeeld --aantal 1 en/of zonder --deploy).
 
 STAP 5 — per concept een Gmail-concept aanmaken
 Voor elke regel in concepten.json:
 - Sla over als "aan" leeg is of als bij "aandacht" iets staat met "GEEN E-MAILADRES". Meld dat wel.
-- Controleer eerst of dit adres al eens is benaderd: search_threads met query: in:anywhere to:<aan> "Voorbeeld van een nieuwe website". Is er een thread, dan géén nieuw concept; meld het.
+- Controleer eerst of dit adres al eens is benaderd: search_threads met query: in:anywhere to:<aan> "Voorbeeld van een nieuwe website". Is er een thread, dan géén nieuw concept; meld het. Controleer ook of er al een concept voor dit adres ligt: list_drafts met query to:<aan>. Ligt er al een, dan ook geen nieuw concept.
 - Maak anders het concept met create_draft: to = [aan], subject = onderwerp (precies zoals in het bestand), body = tekst (precies zoals in het bestand; verander niets aan de tekst, ook geen link). Geen cc, geen bcc, geen bijlage.
 Maak nooit twee concepten voor hetzelfde adres.
 
