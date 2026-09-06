@@ -39,7 +39,7 @@ def vul_aan(c, aanvulling, log=print):
 
 
 def alles(url, map_klant=None, branche=None, doe_deploy=False, demo_url=None, project="voorbeelden",
-          prijs=750, maand=15, log=print, scan=None, naam_hint=None, config_pad=None, aanvulling=None):
+          prijs=750, maand=15, log=print, scan=None, naam_hint=None, config_pad=None, aanvulling=None, snel=False):
     t0 = time.time()
     map_klant = map_klant or os.path.join("klanten", slug(url))
     os.makedirs(map_klant, exist_ok=True)
@@ -60,7 +60,7 @@ def alles(url, map_klant=None, branche=None, doe_deploy=False, demo_url=None, pr
     if not m.get("hero"):
         log("  let op: geen bruikbare foto voor de hero gevonden")
     build.bouw(map_klant, log=log)
-    v = verify.verifieer(map_klant, log=log)
+    v = verify.verifieer(map_klant, log=log, snel=snel)
     stappen["verify_ok"] = v["ok"]
     url_demo = demo_url
     if doe_deploy:

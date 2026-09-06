@@ -8,8 +8,8 @@ menu en koppen), projecten (foto + titel), alle kandidaat-foto's met bron-URL, e
 intro-tekst van de huidige site. Verzint niets; wat ontbreekt blijft leeg en komt in
 NALOPEN.md.
 """
-import argparse, html, json, os, re, sys, urllib.parse
-from sitescan import haal, decodeer, host_van, kaal
+import argparse, html, json, os, re, sys, time, urllib.parse
+from sitescan import haal, decodeer, host_van, kaal, CHALLENGE, GEPARKEERD
 
 PAGINA_WOORDEN = ["dienst", "service", "over", "wie", "project", "portfolio", "referent", "werk", "foto", "galer",
                   "contact", "aanbod", "wat-we-doen", "specialis", "tuin", "team"]
@@ -52,6 +52,9 @@ def bedrijfsnaam(h, host, hint=None):
         kandidaten.append(schoon(m.group(1)))
     t = titel_uit(h)
     if t:
+        # "Welkom bij Bedrijf X, Plaats" → "Bedrijf X"
+        t = re.sub(r"^\s*welkom\s+(bij|op de (web)?site van)\s+", "", t, flags=re.I)
+        t = re.sub(r",\s*[A-Z][\w'\- ]{2,25}$", "", t)          # ", Ruinen" achteraan
         # "Diensten | Bedrijf X" of "Bedrijf X - Hovenier in Y"
         delen = re.split(r"\s+[|\-–—·»:]\s+", t)
         delen = [d for d in delen if d and not re.search(r"^(home|welkom|start)$", d, re.I)]
@@ -64,13 +67,16 @@ def bedrijfsnaam(h, host, hint=None):
     if m and 2 < len(schoon(m.group(1))) < 40 and not re.search(r"welkom|home", schoon(m.group(1)), re.I):
         kandidaten.append(schoon(m.group(1)))
     kandidaten = [k for k in kandidaten if 2 < len(k) < 60 and not re.search(r"^(home|welkom|start|homepage)$", k, re.I)]
-    # slogans zijn geen namen: "Rust, kracht en inspiratie ..." / "Welkom bij ..."
-    kandidaten = [k for k in kandidaten if not re.search(r"(\.\.\.|…)\s*$|^welkom\b", k, re.I) and not ("," in k and len(k.split()) > 3)]
+    # slogans en domeinnamen zijn geen namen: "Rust, kracht en inspiratie ..." / "www.p-c-a.nl" / "Home"
+    kandidaten = [k for k in kandidaten if not re.search(r"(\.\.\.|…)\s*$|^welkom\b|^www\.|\.(nl|com|be|eu|net|org)$|^(home|homepage|start|even geduld)", k, re.I)
+                  and not ("," in k and len(k.split()) > 3)]
     if hint and 2 < len(hint) < 60:
         compact = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
         hostdeel = compact(kaal(host).split(".")[0])
         if hostdeel and (compact(hint) in hostdeel or hostdeel in compact(hint)):
             kandidaten.insert(0, hint)     # naam uit OpenStreetMap past bij het domein: die is betrouwbaar
+        elif kandidaten and hint.lower().startswith(kandidaten[0].lower()) and len(hint) > len(kandidaten[0]) + 3:
+            kandidaten.insert(0, hint)     # "Booy" → "Booy Glas- en Schilderwerken"
         else:
             kandidaten.append(hint)
     if not kandidaten:
@@ -106,7 +112,10 @@ def adres_uit(tekst, naam=""):
                 idx += 1
             idx = max(idx, len(rest) - 3)
         straat = " ".join(rest[idx:] + [nummer])
-        return {"straat": straat, "postcode": re.sub(r"\s", " ", m.group(2)), "plaats": m.group(3).strip()}
+        plaats = m.group(3).strip()
+        if plaats.isupper():
+            plaats = plaats.title()      # "RUINEN" → "Ruinen"
+        return {"straat": straat, "postcode": re.sub(r"\s", " ", m.group(2)), "plaats": plaats}
     m = re.search(r"(\d{4}\s?[A-Z]{2})\s+([A-Z][\w'\- ]{1,30}?)(?=[\s,.|·<]|$)", tekst)
     if m:
         return {"straat": None, "postcode": m.group(1), "plaats": m.group(2).strip()}
@@ -223,6 +232,17 @@ def extract(url, map_uit, branche=None, max_paginas=8, log=print, naam_hint=None
     if not body:
         raise RuntimeError(f"geen inhoud van {url} (status {st})")
     h = decodeer(body, hdr)
+    # wachtpagina van de hoster ("even geduld…", captcha): een paar keer opnieuw proberen, anders afbreken
+    for poging in range(3):
+        if not re.search(CHALLENGE, h.lower()):
+            break
+        time.sleep(4)
+        st, eind, body, hdr, sec = haal(url, timeout=20)
+        h = decodeer(body or b"", hdr)
+    else:
+        raise RuntimeError("site toont alleen een wachtpagina/botcontrole; niet uit te lezen")
+    if re.search(GEPARKEERD, h.lower()) and len(body) < 60_000:
+        raise RuntimeError("site is een parkeer- of hostingpagina; geen echte inhoud")
     basis = eind
     host = host_van(basis)
     paginas = {basis: h}

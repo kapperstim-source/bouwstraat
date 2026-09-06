@@ -82,7 +82,9 @@ GESTOPT = (r"besloten (om )?(voorlopig |definitief |per [^ ]+ )?te stoppen|(wij 
 GEPARKEERD = (r"yourhosting|domein is gereserveerd|dit domein is geregistreerd|domain is parked|parkeerpagina|"
               r"website in aanbouw|binnenkort online|coming soon|under construction|sedo\.com|"
               r"deze website is nog niet|hostnet\.nl/sitebuilder|strato\.nl/.*domein|mijndomein|"
-              r"website wordt gebouwd|nog geen website|op dit moment niet bereikbaar|website is niet bereikbaar")
+              r"website wordt gebouwd|nog geen website|op dit moment niet bereikbaar|website is niet bereikbaar|"
+              r"geen webhosting|webhosting(pakket)? actief|hostingpakket|domeinnaam is (reeds )?gereserveerd|geen website gekoppeld|website offline|"
+              r"this domain (is|has been) (registered|parked)|buy this domain|domain for sale|te koop aangeboden")
 
 
 class Scan:
@@ -203,13 +205,16 @@ class Scan:
             info["generator"] = m.group(1)[:80]
         if re.search(r"wp-content|wp-includes", laag):
             info["cms"] = "WordPress"
-            mv = re.search(r'content=["\']WordPress ([\d.]+)', h, re.I) or re.search(r"wp-includes/[^\"']+\?ver=(\d+\.\d+(?:\.\d+)?)", h)
+            # alleen bronnen die echt de WordPress-versie dragen (niet ?ver= van jQuery of thema-bestanden)
+            mv = (re.search(r'content=["\']?WordPress ([\d.]+)', h, re.I)
+                  or re.search(r"wp-emoji-release\.min\.js\?ver=(\d+\.\d+(?:\.\d+)?)", h)
+                  or re.search(r"wp-includes/css/dist/[^\"']+\?ver=(\d+\.\d+(?:\.\d+)?)", h))
             if mv:
                 v = mv.group(1)
                 info["wordpress_versie"] = v
                 try:
                     maj = int(v.split(".")[0])
-                    if maj < 6:
+                    if 2 <= maj < 6:
                         self.vondst("wordpress-oud", 8, f"de site draait op WordPress {v}, een versie van jaren geleden; de huidige tak is 7")
                 except ValueError:
                     pass
@@ -266,7 +271,7 @@ class Scan:
                 srcs.append(urllib.parse.urljoin(basis, ms.group(1)))
         info["aantal_beelden"] = len(imgs)
         zonder_alt = sum(1 for t in imgs if not re.search(r'\salt=(["\'][^"\']+["\']|[^"\'\s>]+)', t, re.I))
-        if imgs and zonder_alt / len(imgs) > 0.5:
+        if len(imgs) >= 4 and zonder_alt / len(imgs) > 0.5:
             self.vondst("alt-ontbreekt", 5, f"{zonder_alt} van de {len(imgs)} foto's hebben geen omschrijving; Google en voorleessoftware weten dan niet wat erop staat")
         if imgs and not re.search(r'loading=["\']?lazy', h, re.I):
             self.vondst("geen-lazy", 3, "alle foto's laden direct, ook die onderaan de pagina waar de bezoeker nog niet is")

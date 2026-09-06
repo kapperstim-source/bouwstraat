@@ -55,7 +55,7 @@ def schrijf(map_klant, scan, demo_url, prijs=750, maand=15, punt=None, afzender=
         punten = ["de site is op een telefoon lastig te lezen en te bedienen"]
     opsomming = "\n".join(f"- {z};" if i < len(punten) - 1 else f"- {z}." for i, z in enumerate(punten))
     beter = []
-    if m.get("besparing_pct") and m.get("origineel_mb"):
+    if (m.get("besparing_pct") or 0) >= 25 and (m.get("origineel_mb") or 0) >= 1.0:
         beter.append(f"dezelfde foto's wegen nu {m['origineel_mb']:.1f} MB en in het voorbeeld {m['webp_mb']:.1f} MB — {m['besparing_pct']} procent minder, dus veel sneller op een telefoon".replace(".", ","))
     beter.append("de site past zich aan het scherm aan, of dat nu een telefoon, tablet of laptop is")
     if c.get("telefoon"):

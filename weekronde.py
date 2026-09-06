@@ -82,7 +82,7 @@ def kies_kandidaten(scans, adm, aantal):
 
 def reden_overslaan(s):
     """Korte code, zodat de administratie klein blijft: g=geparkeerd, z=gestopt/gesloten, x=onbereikbaar,
-    p=platform (Wix e.d.), e=geen e-mail, s<score>=te lage score, a=afgemeld, b=bouw mislukt."""
+    p=platform (Wix e.d.), e=geen e-mail, s<score>=te lage score, a=afgemeld, b=bouw mislukt, m=te mager."""
     if s.get("geparkeerd"):
         return "g"
     if s.get("gestopt"):
@@ -98,7 +98,15 @@ def reden_overslaan(s):
     return "a"
 
 
-def scan_alles(bedrijven, workers=8):
+def substantie(c, m):
+    """Hoeveel er echt van het bedrijf zelf in de demo zit: logo, foto's, eigen introtekst, eigen
+    dienstnamen, adres en telefoon van de site (niet uit OpenStreetMap)."""
+    return sum([bool(m.get("logo")), (m.get("aantal_foto") or 0) >= 1, bool(c.get("intro")), bool(c.get("diensten")),
+                bool((c.get("adres") or {}).get("plaats")) and c.get("adres_bron") != "openstreetmap",
+                bool(c.get("telefoon")) and c.get("telefoon_bron") != "openstreetmap"])
+
+
+def scan_alles(bedrijven, workers=12):
     uit = []
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {ex.submit(sitescan.scan, b["website"]): b for b in bedrijven}
@@ -142,7 +150,7 @@ def ronde(a):
     gescand_nu = set()      # domeinen die deze ronde al gescand zijn (kansrijke staan nog niet in de administratie)
     idx = adm["stand"]["kalender_index"] % max(len(ronden), 1)
     bekeken = 0
-    while len(kandidaten) < a.aantal * 2 and bekeken < min(3, len(ronden)):
+    while len(kandidaten) < a.aantal + 2 and bekeken < min(3, len(ronden)):
         if time.time() - t_start > a.tijdslimiet * 0.6:
             log("meer dan 60% van de tijd op aan zoeken/scannen; door naar bouwen"); break
         r = ronden[idx]
@@ -195,31 +203,70 @@ def ronde(a):
     if a.test:
         kandidaten = kandidaten[: max(a.aantal, 1)]
 
-    # 2. demo's bouwen
+    # 2. demo's bouwen — een paar tegelijk (netwerk en browser wachten vooral), in vaste volgorde verwerkt
     concepten = []
     mislukt = []
-    for s in kandidaten:
-        if len(concepten) >= a.aantal:
-            break
-        if time.time() - t_start > a.tijdslimiet:
-            log("tijdslimiet bereikt, stoppen met bouwen"); verslag.append("- tijdslimiet bereikt; niet alle kandidaten gebouwd")
-            break
+    resultaten = {}
+
+    def bouw_een(s):
         map_klant = os.path.join(a.werkmap, "klanten", run.slug(s["domein"]))
-        log(f"bouwen: {s['domein']} (score {s['score']}, belang {s.get('belang')})")
+        regels = []
         try:
             uit = run.alles(s.get("eind_url") or s["url"], map_klant, s["branche"], doe_deploy=a.deploy, project=project,
-                            prijs=prijs, maand=maand, log=log, scan=s, naam_hint=s.get("naam_osm"), config_pad=a.config,
-                            aanvulling=s.get("osm"))
-        except Waakhond:
-            log("waakhond: afgebroken tijdens het bouwen; wat klaar is wordt weggeschreven")
-            verslag.append("- waakhond: tijdslimiet bereikt tijdens het bouwen")
-            break
+                            prijs=prijs, maand=maand, log=regels.append, scan=s, naam_hint=s.get("naam_osm"), config_pad=a.config,
+                            aanvulling=s.get("osm"), snel=a.snel)
+            return s, uit, None, regels
         except Exception as e:
-            log(f"  mislukt: {e}")
-            mislukt.append((s["domein"], str(e)[:120]))
+            return s, None, e, regels
+
+    # in porties: eerst precies 'aantal', daarna alleen vervanging voor wat mislukte
+    te_bouwen = []
+    wachtrij = list(kandidaten)
+    try:
+        while True:
+            nodig = a.aantal - sum(1 for d in te_bouwen if d["domein"] in resultaten and resultaten[d["domein"]][1] is None
+                                   and substantie(resultaten[d["domein"]][0]["content"], resultaten[d["domein"]][0]["images"]) >= 2)
+            portie = []
+            while nodig > 0 and wachtrij:
+                portie.append(wachtrij.pop(0)); nodig -= 1
+            if not portie:
+                break
+            if time.time() - t_start > a.tijdslimiet:
+                log("tijdslimiet bereikt, niet alle kandidaten gestart"); verslag.append("- tijdslimiet bereikt; niet alle kandidaten gebouwd")
+                break
+            te_bouwen += portie
+            with ThreadPoolExecutor(max_workers=max(1, a.parallel)) as ex:
+                futs = []
+                for s in portie:
+                    log(f"bouwen: {s['domein']} (score {s['score']}, belang {s.get('belang')})")
+                    futs.append(ex.submit(bouw_een, s))
+                for f in as_completed(futs):
+                    s, uit, fout, regels = f.result()
+                    for r in regels:
+                        log(f"  [{s['domein']}] {r}")
+                    resultaten[s["domein"]] = (uit, fout)
+    except Waakhond:
+        log("waakhond: afgebroken tijdens het bouwen; wat klaar is wordt weggeschreven")
+        verslag.append("- waakhond: tijdslimiet bereikt tijdens het bouwen")
+
+    for s in te_bouwen:
+        if len(concepten) >= a.aantal:
+            break
+        if s["domein"] not in resultaten:
+            continue
+        uit, fout = resultaten[s["domein"]]
+        if fout is not None:
+            log(f"  mislukt: {s['domein']}: {fout}")
+            mislukt.append((s["domein"], str(fout)[:120]))
             adm["overgeslagen"][s["domein"]] = "b"
             continue
         c, m, v, mm = uit["content"], uit["images"], uit["verify"], uit["mail"]
+        if substantie(c, m) < 2:
+            # te weinig van het bedrijf zelf (geen logo, geen foto's, geen eigen tekst): de demo is dan alleen sjabloon
+            log(f"  te mager om te sturen: {s['domein']} (niets eigens gevonden)")
+            mislukt.append((s["domein"], "te mager: geen logo, foto's of eigen tekst gevonden"))
+            adm["overgeslagen"][s["domein"]] = "m"
+            continue
         aandacht = []
         if not m.get("logo"): aandacht.append("geen logo gevonden — bedrijfsnaam staat als tekst")
         if not m.get("hero"): aandacht.append("geen bruikbare foto voor de kop")
@@ -237,8 +284,8 @@ def ronde(a):
         concepten.append({
             "domein": s["domein"], "bedrijf": c["naam"], "plaats": (c.get("adres") or {}).get("plaats"), "branche": s["branche"],
             "score": s["score"], "belang": s.get("belang") or [], "aan": mm.get("aan"), "onderwerp": mm["onderwerp"], "tekst": mm["tekst"],
-            "demo": uit["demo"], "punten": mm["punten"], "aandacht": aandacht, "map": map_klant,
-            "screenshot": os.path.join(map_klant, "screens", "index-mobiel.png"), "seconden": uit["stappen"]["seconden"],
+            "demo": uit["demo"], "punten": mm["punten"], "aandacht": aandacht, "map": uit["map"],
+            "screenshot": os.path.join(uit["map"], "screens", "index-mobiel.png"), "seconden": uit["stappen"]["seconden"],
         })
         adm["prospects"][s["domein"]] = {"naam": c["naam"], "email": mm.get("aan"), "branche": s["branche"], "score": s["score"],
                                         "status": "concept", "datum": VANDAAG, "demo": uit["demo"], "onderwerp": mm["onderwerp"]}
@@ -269,6 +316,8 @@ def main():
     ap.add_argument("--voorraad", help="map met <branche>.json uit oogst.py; ontbreekt een bestand, dan wordt live geoogst")
     ap.add_argument("--deploy", action="store_true"); ap.add_argument("--test", action="store_true")
     ap.add_argument("--tijdslimiet", type=int, default=25 * 60, help="seconden voor de hele ronde")
+    ap.add_argument("--parallel", type=int, default=3, help="aantal demo's dat tegelijk gebouwd wordt")
+    ap.add_argument("--snel", action="store_true", help="alleen screenshots van de homepage (controles blijven volledig)")
     a = ap.parse_args()
     ronde(a)
 

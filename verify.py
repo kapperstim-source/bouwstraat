@@ -33,7 +33,8 @@ def server(map_web):
     return httpd, f"http://127.0.0.1:{poort}"
 
 
-def verifieer(map_klant, log=print):
+def verifieer(map_klant, log=print, snel=False):
+    """snel=True: alleen screenshots van de homepage (desktop + mobiel); de controles blijven volledig."""
     from playwright.sync_api import sync_playwright
     web = os.path.join(map_klant, "web")
     screens = os.path.join(map_klant, "screens")
@@ -82,7 +83,8 @@ def verifieer(map_klant, log=print):
                         res = page.evaluate("async () => { const r = await axe.run(document, {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa']}}); return r.violations.map(v => ({id: v.id, impact: v.impact, nodes: v.nodes.length, help: v.help})); }")
                         for v in res:
                             uit["axe_schendingen"].append({"pagina": pagina, **v})
-                page.screenshot(path=os.path.join(screens, f"{pagina.replace('.html', '')}-{naam}.png"), full_page=(naam == "desktop"))
+                if not snel or pagina == "index.html":
+                    page.screenshot(path=os.path.join(screens, f"{pagina.replace('.html', '')}-{naam}.png"), full_page=(naam == "desktop"))
                 uit["paginas"][f"{pagina}/{naam}"] = {"status": r.status if r else None, "fouten": fouten}
                 for f in fouten:
                     uit["js_fouten"].append(f"{pagina} ({naam}): {f[:200]}")
