@@ -235,17 +235,27 @@ def voor(branche):
     return t
 
 
+WINKELS = {"tuincentra", "bakkers", "slagers", "bloemisten", "fietsenmakers"}
+WINKEL_ZIN = "{naam}: onderdeel van ons assortiment. Loop binnen of vraag ons om advies over keuze en verzorging."
+DIENST_ZIN = "{naam}: vraag naar de mogelijkheden, dan vertellen we wat erbij komt kijken en wat het kost."
+
+
 def koppel_diensten(eigen_namen, branche, maximum=6):
     """Diensten van de bestaande site koppelen aan omschrijvingen. Geeft [(naam, tekst, bron)]
-    met bron 'site' (naam van hun site) of 'voorstel' (uit teksten.py)."""
+    met bron 'site+voorstel' (naam van hun site, omschrijving uit teksten.py), 'site' (naam van
+    hun site, neutrale zin) of 'voorstel' (uit teksten.py). Exacte namen krijgen voorrang op
+    samengestelde ("Advies en Ontwerp") zodat een omschrijving nooit twee keer voorkomt."""
     t = voor(branche)
-    uit = []
+    gevonden = []   # (naam, doel, sterkte)
     for naam in eigen_namen:
         sl = naam.strip().lower()
         doel = ALIAS.get(sl) or next((k for k in t["diensten"] if k.lower() == sl), None)
+        sterkte = 2
         if not doel:
             doel = next((k for k in t["diensten"] if sl in k.lower() or k.lower() in sl), None)
+            sterkte = 1
         if not doel:
+            sterkte = 0
             # samengestelde namen: "Advies en Ontwerp", "Kappen/Rooien van bomen"
             for deel in re.split(r"\s+(?:en|&|/|,)\s+|/", sl):
                 deel = re.sub(r"\b(van|de|het|en|uw)\b", " ", deel).strip()
@@ -255,14 +265,24 @@ def koppel_diensten(eigen_namen, branche, maximum=6):
                         doel = d2; break
                 if doel:
                     break
-        if doel and doel in t["diensten"]:
-            uit.append((naam.strip(), t["diensten"][doel], "site+voorstel"))
+        gevonden.append([naam.strip(), doel if doel in t["diensten"] else None, sterkte])
+    gebruikt = set()
+    for g in sorted(gevonden, key=lambda g: -g[2]):
+        if g[1] and g[1] not in gebruikt:
+            gebruikt.add(g[1])
         else:
-            uit.append((naam.strip(), f"Vraag naar de mogelijkheden voor {naam.strip().lower()}; we vertellen graag wat erbij komt kijken.", "site"))
+            g[1] = None
+    uit = []
+    for naam, doel, _ in gevonden:
+        if doel:
+            uit.append((naam, t["diensten"][doel], "site+voorstel"))
+        else:
+            uit.append((naam, (WINKEL_ZIN if branche in WINKELS else DIENST_ZIN).format(naam=naam), "site"))
     if len(uit) < 3:
         for k, v in t["diensten"].items():
             if len(uit) >= maximum:
                 break
-            if not any(k.lower() == u[0].lower() for u in uit):
+            if k not in gebruikt and not any(k.lower() == u[0].lower() for u in uit):
+                gebruikt.add(k)
                 uit.append((k, v, "voorstel"))
     return uit[:maximum]

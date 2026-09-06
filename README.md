@@ -17,6 +17,8 @@ Playwright) en `npx wrangler` voor het online zetten.
 | `images.py` | foto's ophalen, WebP, logo en hero kiezen, accentkleur uit het logo |
 | `teksten.py` | voorstel-teksten per branche (over het vak, nooit over het bedrijf) |
 | `build.py` | drie pagina's + privacy + 404 + robots.txt, contactformulier, `NALOPEN.md` |
+| `stijlen.py` | vijf huisstijlen (klassiek, robuust, fris, editorial, strak): eigen lettertypes, paletten, opbouw; keuze per domein |
+| `fonts.py` | haalt de lettertypes (OFL) één keer op naar `vendor/fonts/`; demo's leveren ze zelf mee |
 | `verify.py` | Playwright: links, scriptfouten, axe-core, horizontale scroll, screenshots |
 | `deploy.py` | online zetten op Cloudflare Pages als branch van één project (`<slug>.voorbeelden.pages.dev`) |
 | `mail.py` | verkoopmail uit scan + demo (onderwerp: "Voorbeeld van een nieuwe website voor …") |
@@ -26,8 +28,7 @@ Playwright) en `npx wrangler` voor het online zetten.
 ## Wekelijkse ronde (geplande taak "Prospect-agent websiteverkoop")
 
     git clone --depth 1 https://github.com/kapperstim-source/bouwstraat
-    cd bouwstraat
-    export CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ACCOUNT_ID=…     # uit config.json in Drive
+    cd bouwstraat            # config.json (uit Drive) ernaast zetten; deploy.py leest het token daaruit
     python3 weekronde.py --werkmap /tmp/ronde --administratie administratie.json \
         --kalender kalender.json --config config.json --voorraad voorraad --aantal 10 --deploy
 
@@ -37,7 +38,8 @@ Daarna maakt de agent per regel in `/tmp/ronde/concepten.json` een Gmail-concept
 Bestanden in Drive (map Websiteverkoop): `administratie.json` (wie is benaderd of
 overgeslagen, kalenderstand, afmeldingen), `kalender.json` (volgorde van branches),
 `config.json` (Cloudflare-token en -account-id, prijs, maandbedrag), `voorraad/<branche>.json`
-(geoogste bedrijven, zodat de weekronde niet van Overpass afhangt).
+(geoogste bedrijven, zodat de weekronde niet van Overpass afhangt). De voorraad staat sinds
+05-09 in de repo: 22 branches, 16.009 bedrijven, 4.459 met e-mailadres.
 
 ## Regels die in de code zitten
 

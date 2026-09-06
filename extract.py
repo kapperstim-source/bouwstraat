@@ -19,7 +19,12 @@ SOCIALS = {"facebook": r"facebook\.com/[^\"'\s?]+", "instagram": r"instagram\.co
 NAV_SKIP = {"home", "start", "welkom", "contact", "login", "inloggen", "privacy", "disclaimer", "sitemap", "nieuws",
             "blog", "vacatures", "algemene voorwaarden", "cookies", "menu", "zoeken", "english", "en", "de", "fr",
             "werkzaamheden", "diensten", "services", "portfolio", "projecten", "referenties", "over ons", "team", "wie zijn wij",
-            "foto's", "fotos", "galerij", "offerte", "offerte aanvragen", "prijzen", "tarieven", "links", "partners", "downloads"}
+            "foto's", "fotos", "galerij", "offerte", "offerte aanvragen", "prijzen", "tarieven", "links", "partners", "downloads",
+            "vacature", "vacatures", "aanbiedingen", "aanbieding", "assortiment", "agenda", "openingstijden", "nieuwsbrief", "webshop",
+            "winkel", "route", "routebeschrijving", "catalogus", "acties", "folder", "inloggen", "account", "winkelwagen", "bestellen",
+            "over", "over mij", "wie ben ik", "informatie", "info", "algemeen", "welkom bij", "faq", "veelgestelde vragen", "reviews",
+            "klantenservice", "verzenden", "retourneren", "voorwaarden", "shop", "cadeaubon", "cadeaubonnen", "kortingen", "actueel"}
+DIENST_SKIP = r"contact|offerte|meer weten|neem |vacature|aanbieding|assortiment|agenda|openingstijd|nieuwsbrief|webshop|winkelwagen|bestel|inloggen|account|cadeaubon|verzend|retour|voorwaarden|review|klantenservice|route|catalogus|folder|actie"
 
 
 def schoon(t):
@@ -59,8 +64,15 @@ def bedrijfsnaam(h, host, hint=None):
     if m and 2 < len(schoon(m.group(1))) < 40 and not re.search(r"welkom|home", schoon(m.group(1)), re.I):
         kandidaten.append(schoon(m.group(1)))
     kandidaten = [k for k in kandidaten if 2 < len(k) < 60 and not re.search(r"^(home|welkom|start|homepage)$", k, re.I)]
+    # slogans zijn geen namen: "Rust, kracht en inspiratie ..." / "Welkom bij ..."
+    kandidaten = [k for k in kandidaten if not re.search(r"(\.\.\.|…)\s*$|^welkom\b", k, re.I) and not ("," in k and len(k.split()) > 3)]
     if hint and 2 < len(hint) < 60:
-        kandidaten.append(hint)
+        compact = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
+        hostdeel = compact(kaal(host).split(".")[0])
+        if hostdeel and (compact(hint) in hostdeel or hostdeel in compact(hint)):
+            kandidaten.insert(0, hint)     # naam uit OpenStreetMap past bij het domein: die is betrouwbaar
+        else:
+            kandidaten.append(hint)
     if not kandidaten:
         naam = kaal(host).split(".")[0]
         return naam.replace("-", " ").title()
@@ -196,7 +208,7 @@ def intro_tekst(h):
     body = re.sub(r"<(script|style|nav|header|footer|noscript)[^>]*>.*?</\1>", " ", body, flags=re.S | re.I)
     alineas = [schoon(p) for p in re.findall(r"<p\b[^>]*>(.*?)</p>", body, re.I | re.S)]
     alineas += [schoon(p) for p in re.findall(r"<div\b[^>]*>([^<]{80,600})</div>", body, re.I | re.S)]
-    alineas = [a for a in alineas if 80 <= len(a) <= 600 and not re.search(r"cookie|privacy|©|copyright|inloggen|javascript|niet bereikbaar|gesloten|vakantie|i\.?v\.?m\.?|wegens|tijdelijk|\b\d{1,2} (januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\b", a, re.I)]
+    alineas = [a for a in alineas if 80 <= len(a) <= 600 and not re.search(r"cookie|privacy|©|copyright|inloggen|javascript|niet bereikbaar|gesloten|vakantie|i\.?v\.?m\.?|wegens|tijdelijk|vuurwerk|kerst|sinterklaas|pasen|korting|aanbieding|actie\b|dit jaar|dit seizoen|nieuwsbrief|\b\d{1,2} (januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\b", a, re.I)]
     if alineas:
         return alineas[0]
     m = re.search(r'<meta[^>]+name=["\']description["\'][^>]+content=["\']([^"\']{40,})', h, re.I)
@@ -241,7 +253,7 @@ def extract(url, map_uit, branche=None, max_paginas=8, log=print, naam_hint=None
     mails = sorted({m.lower().rstrip(".") for m in re.findall(r"[\w.+-]+@[\w-]+\.[\w.-]+", html.unescape(alle_html))
                     if not re.search(r"\.(png|jpe?g|gif|svg|webp|css|js)$", m, re.I) and "example" not in m and "wixpress" not in m and "sentry" not in m}
                    | {m.lower() for m in re.findall(r'mailto:([^"\'?]+)', alle_html, re.I)},
-                  key=lambda m: (0 if m.startswith("info@") else 1, 0 if kaal(host) in m else 1, m))
+                  key=lambda m: (0 if kaal(host) in m else 1, 0 if m.startswith("info@") else 1, m))
     tels = []
     for t in re.findall(r"(?:\+31|0031|0)[\s\-]?(?:\(0\))?[\s\-]?(?:\d[\s\-]?){8,9}\d", alle_tekst):
         c = re.sub(r"\D", "", t)
@@ -260,11 +272,11 @@ def extract(url, map_uit, branche=None, max_paginas=8, log=print, naam_hint=None
     for u, p in paginas.items():
         if re.search(r"dienst|service|aanbod|specialis|wat-we-doen", u, re.I) and u != basis:
             for k in koppen(p):
-                if 3 < len(k) < 45 and k.lower() not in NAV_SKIP and not re.search(r"contact|offerte|meer weten|neem|bel ", k, re.I):
+                if 3 < len(k) < 45 and k.lower() not in NAV_SKIP and not re.search(DIENST_SKIP + r"|bel ", k, re.I):
                     diensten.append(k)
     if len(diensten) < 3:
         for u, t in nav_items(h, basis):
-            if t.lower() not in NAV_SKIP and not re.search(r"over|project|referent|foto|galer|nieuws|contact|home", t, re.I):
+            if t.lower() not in NAV_SKIP and not re.search(r"over|project|referent|foto|galer|nieuws|contact|home|" + DIENST_SKIP, t, re.I):
                 diensten.append(t)
     gezien = set(); diensten = [d for d in diensten if not (d.lower() in gezien or gezien.add(d.lower()))][:8]
     # beelden en projecten

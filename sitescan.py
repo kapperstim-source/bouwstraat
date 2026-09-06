@@ -69,6 +69,22 @@ def kaal(host):
     return re.sub(r"^www\.", "", host)
 
 
+CHALLENGE = (r"sgcaptcha|cf-chl|challenge-platform|just a moment|attention required|checking your browser|"
+             r"ddos-guard|/cdn-cgi/challenge|verify you are human|bot-protection|captcha-delivery|"
+             r"<title>\s*(even geduld|please wait|one moment)")
+# jaar van uitgave per jQuery-tak (eerste release van die tak)
+JQUERY_JAAR = {(1, 0): 2006, (1, 1): 2007, (1, 2): 2007, (1, 3): 2009, (1, 4): 2010, (1, 5): 2011, (1, 6): 2011, (1, 7): 2011,
+               (1, 8): 2012, (1, 9): 2013, (1, 10): 2013, (1, 11): 2014, (1, 12): 2016, (2, 0): 2013, (2, 1): 2014, (2, 2): 2016}
+GESTOPT = (r"besloten (om )?(voorlopig |definitief |per [^ ]+ )?te stoppen|(wij |we )?zijn (per [^ ]+ )?gestopt|is (per [^ ]+ )?gestopt met|"
+           r"definitief gesloten|voorgoed gesloten|bedrijf is beëindigd|bedrijf is beeindigd|activiteiten (zijn )?(gestaakt|beëindigd)|"
+           r"failliet verklaard|faillissement|niet meer open ?gaan|gaan niet meer open|(dit|het) jaar niet meer open|"
+           r"wegens beëindiging|bedankt voor (alle|de) jaren|na \d+ jaar (stoppen|gestopt)|we sluiten (de deuren|onze deuren)|sluit (per|op) [^ ]+ (definitief )?de deuren")
+GEPARKEERD = (r"yourhosting|domein is gereserveerd|dit domein is geregistreerd|domain is parked|parkeerpagina|"
+              r"website in aanbouw|binnenkort online|coming soon|under construction|sedo\.com|"
+              r"deze website is nog niet|hostnet\.nl/sitebuilder|strato\.nl/.*domein|mijndomein|"
+              r"website wordt gebouwd|nog geen website|op dit moment niet bereikbaar|website is niet bereikbaar")
+
+
 class Scan:
     def __init__(self, url):
         self.url_in = normaliseer(url)
@@ -112,7 +128,11 @@ class Scan:
             try:
                 https_host = host_van(eind) if eind else host
                 st2, eind2, body2, hdr2, sec2 = haal("https://" + https_host + "/", timeout=15)
-                if st2 < 400 and len(body2) > 500:
+                if st2 < 400 and len(body2) > 500 and len(body2) < 60_000 and re.search(GEPARKEERD + "|" + CHALLENGE, decodeer(body2, hdr2).lower()):
+                    # https toont een foutpagina van de hoster; de echte site staat alleen op http
+                    info["https_bereikbaar"] = "placeholder"
+                    self.vondst("https-placeholder", 10, "de beveiligde versie van de site (https) toont een foutpagina van de hostingpartij ('website niet bereikbaar'); wie via Google of een link binnenkomt, kan daar terechtkomen")
+                elif st2 < 400 and len(body2) > 500:
                     self.vondst("geen-https-doorverwijzing", 6,
                                 "wie het adres zonder https intypt, blijft op de onbeveiligde versie hangen — de browser toont dan 'niet veilig'")
                     info["https_bereikbaar"] = True
@@ -139,12 +159,15 @@ class Scan:
         h = decodeer(body, hdr)
         info["html_kb"] = round(len(body) / 1024)
         laag = h.lower()
+        # botbescherming (SiteGround-captcha, Cloudflare-challenge e.d.): we zien niet de echte site,
+        # dus niet beoordelen en zeker geen demo van bouwen
+        hdr_laag = {str(k).lower(): str(v).lower() for k, v in (hdr or {}).items()} if hasattr(hdr, "items") else {}
+        if hdr_laag.get("sg-captcha") or "cf-mitigated" in hdr_laag or re.search(CHALLENGE, laag):
+            info["fout"] = "botbescherming: site is vanuit de cloud niet te lezen"
+            self.b = []
+            return self.resultaat()
         # geparkeerd / in aanbouw: geen echte site, dus geen prospect voor een herbouw
-        if len(body) < 60_000 and re.search(
-                r"yourhosting|domein is gereserveerd|dit domein is geregistreerd|domain is parked|parkeerpagina|"
-                r"website in aanbouw|binnenkort online|coming soon|under construction|sedo\.com|"
-                r"deze website is nog niet|hostnet\.nl/sitebuilder|strato\.nl/.*domein|mijndomein|"
-                r"website wordt gebouwd|nog geen website|op dit moment niet bereikbaar", laag):
+        if len(body) < 60_000 and re.search(GEPARKEERD, laag):
             info["geparkeerd"] = True
             info["fout"] = "geparkeerd of in aanbouw"
             self.b = []
@@ -152,6 +175,16 @@ class Scan:
         tekst = html.unescape(re.sub(r"<[^>]+>", " ", re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", h, flags=re.S | re.I)))
         tekst = re.sub(r"\s+", " ", tekst)
         info["tekst_lengte"] = len(tekst)
+        # bedrijf gestopt of (voorlopig) dicht: geen prospect
+        if re.search(GESTOPT, tekst.lower()):
+            info["gestopt"] = True
+            info["fout"] = "bedrijf meldt op de site dat het gestopt of gesloten is"
+            self.b = []
+            return self.resultaat()
+        if len(tekst.strip()) < 40 and "<frame" not in laag and "<iframe" not in laag:
+            info["fout"] = "lege pagina: vrijwel geen tekst (doorverwijzing, script-only of afgeschermd)"
+            self.b = []
+            return self.resultaat()
         basis = eind
 
         # platform
@@ -165,7 +198,7 @@ class Scan:
                 platform = naam
                 break
         info["platform"] = platform
-        m = re.search(r'<meta[^>]+name=["\']generator["\'][^>]+content=["\']([^"\']+)', h, re.I)
+        m = re.search(r'<meta[^>]+name=["\']?generator\b[^>]+content=["\']?([^"\'>]+)', h, re.I)
         if m:
             info["generator"] = m.group(1)[:80]
         if re.search(r"wp-content|wp-includes", laag):
@@ -186,7 +219,7 @@ class Scan:
             info["cms"] = "Drupal"
 
         # viewport
-        if not re.search(r'<meta[^>]+name=["\']viewport["\']', h, re.I):
+        if not re.search(r'<meta[^>]+name=["\']?viewport\b', h, re.I):
             self.vondst("geen-viewport", 25, "op een telefoon wordt de hele site verkleind weergegeven: knijpen en schuiven om iets te lezen — en het meeste bezoek komt via de telefoon")
         # mixed content
         if https_eind and re.search(r'(src|href)=["\']http://(?!' + re.escape(kaal(host)) + r')', h, re.I) and re.search(r'<(img|script|link)[^>]+(src|href)=["\']http://', h, re.I):
@@ -208,7 +241,8 @@ class Scan:
             maj, mnr = int(mj.group(1)), int(mj.group(2))
             info["jquery_versie"] = f"{maj}.{mnr}" + (f".{mj.group(3)}" if mj.group(3) else "")
             if maj < 3:
-                self.vondst("jquery-oud", 6, f"er wordt een scriptbibliotheek uit ongeveer {2006 + maj * 4 + (mnr // 3)} gebruikt (jQuery {info['jquery_versie']}) met bekende, allang opgeloste problemen")
+                jaar = JQUERY_JAAR.get((maj, mnr), 2006 + maj * 4 + (mnr // 3))
+                self.vondst("jquery-oud", 6, f"er wordt een scriptbibliotheek uit {jaar} gebruikt (jQuery {info['jquery_versie']}) met bekende, allang opgeloste problemen")
         mb = re.search(r"bootstrap[-.](\d)\.(\d)", laag)
         if mb:
             info["bootstrap"] = f"{mb.group(1)}.{mb.group(2)}"
@@ -218,23 +252,23 @@ class Scan:
             info["google_fonts"] = True
         # laadtijd
         if sec > 6:
-            self.vondst("traag", 12, f"de homepage deed er {sec:.1f} seconden over om binnen te komen; na 3 seconden haakt een groot deel van de bezoekers af")
+            self.vondst("traag", 12, f"de homepage deed er {sec:.1f} seconden over om binnen te komen; na 3 seconden haakt een groot deel van de bezoekers af".replace(".", ","))
         elif sec > 3:
-            self.vondst("traag", 8, f"de homepage deed er {sec:.1f} seconden over om binnen te komen; na 3 seconden haakt een groot deel van de bezoekers af")
+            self.vondst("traag", 8, f"de homepage deed er {sec:.1f} seconden over om binnen te komen; na 3 seconden haakt een groot deel van de bezoekers af".replace(".", ","))
         if len(body) > 300_000:
             self.vondst("html-groot", 4, f"alleen al de pagina-code is {len(body)//1024} kB, ruim meer dan nodig")
         # beelden
         imgs = re.findall(r"<img\b[^>]*>", h, re.I)
         srcs = []
         for tag in imgs:
-            ms = re.search(r'\ssrc=["\']([^"\']+)', tag, re.I) or re.search(r'\sdata-src=["\']([^"\']+)', tag, re.I)
+            ms = re.search(r'\ssrc=["\']?([^"\'\s>]+)', tag, re.I) or re.search(r'\sdata-src=["\']?([^"\'\s>]+)', tag, re.I)
             if ms and not ms.group(1).startswith("data:"):
                 srcs.append(urllib.parse.urljoin(basis, ms.group(1)))
         info["aantal_beelden"] = len(imgs)
-        zonder_alt = sum(1 for t in imgs if not re.search(r'\salt=["\'][^"\']+["\']', t, re.I))
+        zonder_alt = sum(1 for t in imgs if not re.search(r'\salt=(["\'][^"\']+["\']|[^"\'\s>]+)', t, re.I))
         if imgs and zonder_alt / len(imgs) > 0.5:
             self.vondst("alt-ontbreekt", 5, f"{zonder_alt} van de {len(imgs)} foto's hebben geen omschrijving; Google en voorleessoftware weten dan niet wat erop staat")
-        if imgs and not re.search(r'loading=["\']lazy', h, re.I):
+        if imgs and not re.search(r'loading=["\']?lazy', h, re.I):
             self.vondst("geen-lazy", 3, "alle foto's laden direct, ook die onderaan de pagina waar de bezoeker nog niet is")
         webp = any(re.search(r"\.(webp|avif)(\?|$)", s, re.I) for s in srcs) or "image/webp" in laag
         gewicht = 0
@@ -251,7 +285,7 @@ class Scan:
                     gewicht += g
         info["beeld_mb"] = round(gewicht / 1e6, 2)
         if gewicht > 3e6:
-            self.vondst("beeld-zwaar", 8, f"de foto's op de homepage wegen samen {gewicht/1e6:.1f} MB; op mobiel internet is dat lang wachten en veel databundel")
+            self.vondst("beeld-zwaar", 8, f"de foto's op de homepage wegen samen {gewicht/1e6:.1f} MB; op mobiel internet is dat lang wachten en veel databundel".replace(".", ","))
         if uniek and not webp:
             self.vondst("geen-webp", 3, "de foto's staan in een verouderd bestandsformaat; hetzelfde beeld kan 60 tot 80 procent kleiner")
         # seo-basis
@@ -260,13 +294,13 @@ class Scan:
         info["titel"] = titel[:120]
         if not titel:
             self.vondst("geen-title", 5, "de pagina heeft geen titel; in Google en in het browsertabblad staat dan alleen het webadres")
-        if not re.search(r'<meta[^>]+name=["\']description["\'][^>]+content=["\'][^"\']{20,}', h, re.I):
+        if not re.search(r'<meta[^>]+name=["\']?description\b[^>]+content=["\']?[^"\'>]{20,}', h, re.I) and not re.search(r'<meta[^>]+content=["\']?[^"\'>]{20,}[^>]+name=["\']?description\b', h, re.I):
             self.vondst("geen-description", 5, "er is geen omschrijving voor Google ingesteld, dus Google kiest zelf een willekeurig stukje tekst als samenvatting")
         if not re.search(r"<h1\b", laag):
             self.vondst("geen-h1", 4, "de pagina heeft geen hoofdkop, wat het voor Google lastiger maakt om te zien waar de site over gaat")
-        if not re.search(r'<link[^>]+rel=["\']canonical', h, re.I):
+        if not re.search(r'<link[^>]+rel=["\']?canonical', h, re.I):
             self.vondst("geen-canonical", 2, "er is niet aangegeven welk adres het hoofdadres is (met en zonder www), waardoor Google de site dubbel kan zien")
-        if not re.search(r'property=["\']og:', h, re.I):
+        if not re.search(r'property=["\']?og:', h, re.I):
             self.vondst("geen-og", 3, "wie de site deelt via WhatsApp of Facebook krijgt geen voorvertoning met foto en titel")
         if not re.search(r"schema\.org|application/ld\+json", laag):
             self.vondst("geen-schema", 3, "bedrijfsgegevens zijn niet in de code gemarkeerd, waardoor Google openingstijden en adres niet direct kan tonen")
@@ -338,7 +372,7 @@ class Scan:
                 except Exception:
                     continue
         eigen = [m for m in mails if kaal(host).split(".")[0] in m]
-        voorkeur = sorted(mails, key=lambda m: (0 if m.startswith("info@") else 1, 0 if kaal(host) in m else 1, m))
+        voorkeur = sorted(mails, key=lambda m: (0 if kaal(host) in m else 1, 0 if m.startswith("info@") else 1, m))
         info["emails"] = voorkeur[:5]
         info["email"] = voorkeur[0] if voorkeur else None
         info["telefoon"] = sorted(tels)[:3]

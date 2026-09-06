@@ -81,10 +81,12 @@ def kies_kandidaten(scans, adm, aantal):
 
 
 def reden_overslaan(s):
-    """Korte code, zodat de administratie klein blijft: g=geparkeerd, x=onbereikbaar,
+    """Korte code, zodat de administratie klein blijft: g=geparkeerd, z=gestopt/gesloten, x=onbereikbaar,
     p=platform (Wix e.d.), e=geen e-mail, s<score>=te lage score, a=afgemeld, b=bouw mislukt."""
     if s.get("geparkeerd"):
         return "g"
+    if s.get("gestopt"):
+        return "z"
     if s.get("fout"):
         return "x"
     if s.get("platform"):
@@ -105,6 +107,7 @@ def scan_alles(bedrijven, workers=8):
             s = f.result()
             s["domein"] = b["domein"]; s["naam_osm"] = b.get("naam"); s["branche"] = b["branche"]
             s["plaats_osm"] = b.get("plaats"); s["email_osm"] = b.get("email")
+            s["osm"] = {k: b.get(k) for k in ("straat", "postcode", "plaats", "telefoon") if b.get(k)}
             if not s.get("email") and b.get("email"):
                 s["email"] = b["email"]
             uit.append(s)
@@ -136,6 +139,7 @@ def ronde(a):
 
     # 1. kandidaten verzamelen via de kalender
     kandidaten = []
+    gescand_nu = set()      # domeinen die deze ronde al gescand zijn (kansrijke staan nog niet in de administratie)
     idx = adm["stand"]["kalender_index"] % max(len(ronden), 1)
     bekeken = 0
     while len(kandidaten) < a.aantal * 2 and bekeken < min(3, len(ronden)):
@@ -161,7 +165,7 @@ def ronde(a):
                 log(f"  oogst mislukt: {e}")
                 verslag.append(f"- {r['branche']}: oogst mislukt ({str(e)[:80]})")
                 lijst = []
-        nieuw = [b for b in lijst if not in_administratie(adm, b["domein"])]
+        nieuw = [b for b in lijst if not in_administratie(adm, b["domein"]) and b["domein"] not in gescand_nu]
         log(f"  {len(lijst)} bedrijven, {len(nieuw)} nog niet bekeken")
         if not nieuw:
             verslag.append(f"- {r['branche']} / {r.get('regio', 'Nederland')}: alles al bekeken, door naar de volgende branche")
@@ -173,11 +177,13 @@ def ronde(a):
             scans = scan_alles(nieuw)
         except Waakhond:
             log("waakhond: afgebroken tijdens het scannen"); verslag.append("- waakhond: tijdslimiet bereikt tijdens het scannen"); break
+        gescand_nu.update(b["domein"] for b in nieuw)
         goed = kies_kandidaten(scans, adm, a.aantal)
         for s in scans:
             if s not in goed:
                 adm["overgeslagen"][s["domein"]] = reden_overslaan(s)
-        kandidaten += goed
+        al = {k["domein"] for k in kandidaten}
+        kandidaten += [s for s in goed if s["domein"] not in al]
         verslag.append(f"- {r['branche']} / {r.get('regio', 'Nederland')}: {len(lijst)} gevonden, {len(nieuw)} gescand, {len(goed)} kansrijk (score ≥ {MIN_SCORE} met e-mail)")
         log(f"  {len(goed)} kansrijk")
         if len(nieuw) < a.max_scan:
@@ -202,7 +208,8 @@ def ronde(a):
         log(f"bouwen: {s['domein']} (score {s['score']}, belang {s.get('belang')})")
         try:
             uit = run.alles(s.get("eind_url") or s["url"], map_klant, s["branche"], doe_deploy=a.deploy, project=project,
-                            prijs=prijs, maand=maand, log=log, scan=s, naam_hint=s.get("naam_osm"))
+                            prijs=prijs, maand=maand, log=log, scan=s, naam_hint=s.get("naam_osm"), config_pad=a.config,
+                            aanvulling=s.get("osm"))
         except Waakhond:
             log("waakhond: afgebroken tijdens het bouwen; wat klaar is wordt weggeschreven")
             verslag.append("- waakhond: tijdslimiet bereikt tijdens het bouwen")
@@ -218,7 +225,11 @@ def ronde(a):
         if not m.get("hero"): aandacht.append("geen bruikbare foto voor de kop")
         if (m.get("aantal_foto") or 0) < 3: aandacht.append(f"maar {m.get('aantal_foto', 0)} foto's bruikbaar")
         if not (c.get("adres") or {}).get("plaats"): aandacht.append("geen adres gevonden")
+        elif c.get("adres_bron") == "openstreetmap": aandacht.append("adres komt uit OpenStreetMap, stond niet op hun site — controleren")
         if not c.get("telefoon"): aandacht.append("geen telefoonnummer gevonden")
+        elif c.get("telefoon_bron") == "openstreetmap": aandacht.append("telefoonnummer komt uit OpenStreetMap, stond niet op hun site — controleren")
+        if mm.get("aan") and s.get("domein") and domein_van_mail(mm["aan"]) != s["domein"]:
+            aandacht.append(f"e-mailadres hoort bij een ander domein ({domein_van_mail(mm['aan'])}) — controleren of dit echt van dit bedrijf is")
         if not c.get("diensten"): aandacht.append("diensten zijn standaardteksten voor de branche (stonden niet op hun site)")
         if not v["ok"]: aandacht.append("verify niet helemaal schoon: " + json.dumps({k: v[k] for k in ("kapotte_links", "js_fouten", "axe_schendingen", "horizontale_scroll") if v[k]}, ensure_ascii=False)[:300])
         if not mm.get("aan"): aandacht.append("GEEN E-MAILADRES — concept niet aanmaken")
@@ -237,7 +248,8 @@ def ronde(a):
     adm["stand"]["aantal_ronden"] = adm["stand"].get("aantal_ronden", 0) + 1
     json.dump(adm, open(os.path.join(a.werkmap, "administratie.json"), "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
     json.dump(concepten, open(os.path.join(a.werkmap, "concepten.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    verslag += ["", f"## {len(concepten)} concepten klaar", ""]
+    verslag += ["", f"## {len(concepten)} concepten klaar", "",
+                "Kop-foto, diensten en teksten zijn automatisch gekozen: bekijk elke demo even voordat je het concept verstuurt.", ""]
     for k in concepten:
         verslag.append(f"- **{k['bedrijf']}** ({k['plaats'] or '?'}, {k['branche']}, score {k['score']}) → {k['aan']} · demo {k['demo']}"
                        + (f" · let op: {'; '.join(k['aandacht'])}" if k["aandacht"] else ""))
@@ -245,6 +257,7 @@ def ronde(a):
         verslag += ["", "## Mislukt", ""] + [f"- {d}: {f}" for d, f in mislukt]
     verslag += ["", f"Duur: {round((time.time() - t_start) / 60)} min · administratie: {len(adm['prospects'])} benaderd, {len(adm['overgeslagen'])} overgeslagen, kalender-index {adm['stand']['kalender_index']}"]
     open(os.path.join(a.werkmap, "verslag.md"), "w", encoding="utf-8").write("\n".join(verslag) + "\n")
+    open(os.path.join(a.werkmap, "klaar.txt"), "w").write(f"{datetime.now():%Y-%m-%d %H:%M:%S} klaar, {len(concepten)} concepten\n")
     print("\n".join(verslag))
     return concepten
 

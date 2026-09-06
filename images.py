@@ -122,7 +122,8 @@ def verwerk(map_klant, maximum=30, breedte=1400, log=print):
         w, h = img.size
         is_logo_hint = "logo" in (b.get("class", "") + " " + b.get("alt", "") + " " + b["url"]).lower()
         foto = is_foto(img) if w >= 200 and h >= 150 else False
-        if is_logo_hint and logo is None and not (foto and w > 900):
+        if is_logo_hint and logo is None and not (foto and w > 900) and w / max(h, 1) <= 6 and h >= 24:
+            # (extreem brede of piepkleine 'logo'-plaatjes zijn banners of iconen, geen logo)
             # logo: bewaren als png (transparantie) of webp
             img2 = ImageOps.exif_transpose(img)
             if img2.mode not in ("RGBA", "RGB"):

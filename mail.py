@@ -11,7 +11,7 @@ inbox-agent op. Over certificaten/https staat niets in de mail (niet te controle
 """
 import argparse, json, os, re, sys
 
-NIET_IN_MAIL = {"geen-https", "https-leeg", "geen-https-doorverwijzing", "mixed-content", "geen-canonical", "geen-schema", "html-groot"}
+NIET_IN_MAIL = {"geen-https", "https-leeg", "https-placeholder", "geen-https-doorverwijzing", "mixed-content", "geen-canonical", "geen-schema", "html-groot"}
 VOLGORDE = ["geen-viewport", "traag", "flash", "oude-html", "tabel-layout", "wordpress-oud", "copyright-oud", "beeld-zwaar",
             "geen-description", "geen-title", "jquery-oud", "alt-ontbreekt", "geen-og", "analytics-zonder-cookiemelding",
             "geen-privacy", "geen-h1", "geen-webp", "geen-lazy", "bootstrap-oud"]
@@ -58,9 +58,19 @@ def schrijf(map_klant, scan, demo_url, prijs=750, maand=15, punt=None, afzender=
     if m.get("besparing_pct") and m.get("origineel_mb"):
         beter.append(f"dezelfde foto's wegen nu {m['origineel_mb']:.1f} MB en in het voorbeeld {m['webp_mb']:.1f} MB — {m['besparing_pct']} procent minder, dus veel sneller op een telefoon".replace(".", ","))
     beter.append("de site past zich aan het scherm aan, of dat nu een telefoon, tablet of laptop is")
-    beter.append("het telefoonnummer staat op elke pagina bovenaan, met één tik te bellen")
+    if c.get("telefoon"):
+        beter.append("het telefoonnummer staat op elke pagina bovenaan, met één tik te bellen")
+    else:
+        beter.append("op elke pagina staat een knop om direct contact op te nemen")
     beter.append("de basis voor Google is op orde: titels, omschrijvingen en de bedrijfsgegevens in de code")
     beter_txt = "\n".join(f"- {z};" if i < len(beter) - 1 else f"- {z}." for i, z in enumerate(beter))
+    # alleen beloven wat er echt in zit
+    delen = ["uw eigen teksten"]
+    if (m.get("aantal_foto") or 0) > 0:
+        delen.append("foto's")
+    if m.get("logo"):
+        delen.append("logo")
+    eigen = delen[0] if len(delen) == 1 else ", ".join(delen[:-1]) + " en " + delen[-1]
     onderwerp = f"Voorbeeld van een nieuwe website voor {naam}"
     tekst = f"""Beste heer/mevrouw,
 
@@ -68,7 +78,7 @@ def schrijf(map_klant, scan, demo_url, prijs=750, maand=15, punt=None, afzender=
 
 {opsomming}
 
-In plaats van dat alleen te vertellen heb ik een voorbeeld gemaakt van hoe uw site er nu uit zou kunnen zien, met uw eigen teksten, foto's en logo:
+In plaats van dat alleen te vertellen heb ik een voorbeeld gemaakt van hoe uw site er nu uit zou kunnen zien, met {eigen}:
 
 {demo_url}
 

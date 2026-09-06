@@ -17,8 +17,29 @@ def slug(url):
     return re.sub(r"[^a-z0-9]+", "-", host.rsplit(".", 1)[0]).strip("-")[:40]
 
 
+def vul_aan(c, aanvulling, log=print):
+    """Ontbreekt adres of telefoon op de site, neem ze dan over uit OpenStreetMap (aanvulling uit
+    de voorraad). Wordt gemarkeerd, zodat NALOPEN.md en het verslag melden dat het gecontroleerd moet worden."""
+    if not aanvulling:
+        return c
+    if not (c.get("adres") or {}).get("plaats") and aanvulling.get("plaats"):
+        pc = re.sub(r"^(\d{4})\s?([A-Za-z]{2})$", r"\1 \2", (aanvulling.get("postcode") or "").strip()).upper()
+        c["adres"] = {"straat": aanvulling.get("straat") or "", "postcode": pc, "plaats": aanvulling["plaats"]}
+        c["adres_bron"] = "openstreetmap"
+        log("  adres niet op de site gevonden; overgenomen uit OpenStreetMap (controleren)")
+    if not c.get("telefoon") and aanvulling.get("telefoon"):
+        t = re.sub(r"\D", "", aanvulling["telefoon"])
+        if t.startswith("31"):
+            t = "0" + t[2:]
+        if len(t) == 10:
+            c["telefoon"] = [t]
+            c["telefoon_bron"] = "openstreetmap"
+            log("  telefoonnummer niet op de site gevonden; overgenomen uit OpenStreetMap (controleren)")
+    return c
+
+
 def alles(url, map_klant=None, branche=None, doe_deploy=False, demo_url=None, project="voorbeelden",
-          prijs=750, maand=15, log=print, scan=None, naam_hint=None):
+          prijs=750, maand=15, log=print, scan=None, naam_hint=None, config_pad=None, aanvulling=None):
     t0 = time.time()
     map_klant = map_klant or os.path.join("klanten", slug(url))
     os.makedirs(map_klant, exist_ok=True)
@@ -32,7 +53,8 @@ def alles(url, map_klant=None, branche=None, doe_deploy=False, demo_url=None, pr
     c = extract.extract(scan.get("eind_url") or url, map_klant, branche, log=log, naam_hint=naam_hint)
     if not c.get("email") and scan.get("email"):
         c["email"] = scan["email"]
-        json.dump(c, open(os.path.join(map_klant, "content.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    vul_aan(c, aanvulling, log=log)
+    json.dump(c, open(os.path.join(map_klant, "content.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     m = images.verwerk(map_klant, log=log)
     stappen["beelden"] = m.get("aantal_foto", 0)
     if not m.get("hero"):
@@ -43,7 +65,7 @@ def alles(url, map_klant=None, branche=None, doe_deploy=False, demo_url=None, pr
     url_demo = demo_url
     if doe_deploy:
         import deploy
-        d = deploy.deploy(map_klant, project=project, log=log)
+        d = deploy.deploy(map_klant, project=project, log=log, config_pad=config_pad)
         url_demo = d["url"]
     if not url_demo:
         url_demo = "https://<demo-adres-nog-in-te-vullen>"
