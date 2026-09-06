@@ -8,6 +8,7 @@ Lukt het clonen niet, stop dan en meld het. Toont `cat bouwstraat/VERSIE` niet p
 
 STAP 2 — instellingen en administratie uit Google Drive
 Zoek met search_files: title = 'Websiteverkoop' and mimeType = 'application/vnd.google-apps.folder' → onthoud het map-id.
+CONTROLE VOORAF: Bash: date -u +%F → <datum>. Zoek met search_files: parentId = '<map-id>' and title contains 'concepten-'. Bestaat `concepten-<datum>.json` al, dan heeft een eerdere run van vandaag het werk al gedaan: STOP hier, bouw niets, en meld "Deel A is vandaag al gelopen (concepten-<datum>.json bestaat); niets gedaan."
 Zoek in die map (parentId = map-id) `config.json` en `administratie.json`; bij meerdere met dezelfde naam de nieuwste (modifiedTime). Onthoud het file-id van administratie.json.
 Haal beide op met download_file_content (base64) en zet ze op schijf, één Bash-commando per bestand:
 cd /tmp/bouwstraat && base64 -d > config.json <<'B64'
