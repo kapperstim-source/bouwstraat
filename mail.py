@@ -4,8 +4,8 @@
     python3 mail.py klanten/<map> --scan scan.json --demo https://... [--prijs 750] [--maand 15] [--punt "iets wat je zelf zag"]
 
 Schrijft klanten/<map>/mail.json {onderwerp, aan, tekst} en mail.md.
-Opbouw (verkoopmail.md): wie/waarom · drie concrete dingen · demo-link · wat beter is met
-de fotobesparing als cijfer · prijs met marktvergelijking · makkelijke uitweg.
+Opbouw (verkoopmail.md, positieve versie 22-10): wie/waarom · compliment · demo-link · wat u terugziet
+(fotobesparing als cijfer) · prijs eenmalig, geen maandbedrag · makkelijke uitweg.
 Onderwerp begint altijd met "Voorbeeld van een nieuwe website voor" — daar zoekt de
 inbox-agent op. Over certificaten/https staat niets in de mail (niet te controleren).
 """
@@ -25,7 +25,7 @@ BRANCHE_WOORD = {"hoveniers": "hoveniers", "tuincentra": "tuincentra", "dakdekke
                  "bed-and-breakfasts": "bed & breakfasts", "sportscholen": "sportscholen", "kinderopvang": "kinderopvang"}
 
 AFZENDER = {"naam": "Tim Kappers", "email": "kapperstim@gmail.com",
-            "intro": "Ik ben Tim Kappers, vierdejaars student commerciële economie, en ik bouw websites voor kleine bedrijven."}
+            "intro": "Mijn naam is Tim Kappers. Ik ben vierdejaars student commerciële economie en bouw websites voor ondernemers."}
 
 
 def kies_punten(scan, punt_eigen=None, n=3):
@@ -54,15 +54,17 @@ def schrijf(map_klant, scan, demo_url, prijs=750, maand=15, punt=None, afzender=
     if not punten:
         punten = ["de site is op een telefoon lastig te lezen en te bedienen"]
     opsomming = "\n".join(f"- {z};" if i < len(punten) - 1 else f"- {z}." for i, z in enumerate(punten))
+    # Positieve opbouw (Tim, 29-09 en 22-10): geen lijst met fouten, alleen wat het voorbeeld oplevert.
     beter = []
     if (m.get("besparing_pct") or 0) >= 25 and (m.get("origineel_mb") or 0) >= 1.0:
-        beter.append(f"dezelfde foto's wegen nu {m['origineel_mb']:.1f} MB en in het voorbeeld {m['webp_mb']:.1f} MB — {m['besparing_pct']} procent minder, dus veel sneller op een telefoon".replace(".", ","))
-    beter.append("de site past zich aan het scherm aan, of dat nu een telefoon, tablet of laptop is")
-    if c.get("telefoon"):
-        beter.append("het telefoonnummer staat op elke pagina bovenaan, met één tik te bellen")
+        beter.append(f"dezelfde foto's, maar {m['besparing_pct']} procent lichter, dus de site laadt op een telefoon veel sneller")
     else:
-        beter.append("op elke pagina staat een knop om direct contact op te nemen")
-    beter.append("de basis voor Google is op orde: titels, omschrijvingen en de bedrijfsgegevens in de code")
+        beter.append("de site past zich aan elk scherm aan, of dat nu een telefoon, tablet of laptop is")
+    if c.get("telefoon"):
+        beter.append("uw telefoonnummer bovenaan elke pagina, met één tik te bellen")
+    else:
+        beter.append("op elke pagina een knop om direct contact op te nemen")
+    beter.append("een eigen omschrijving voor Google, zodat u meer invloed heeft op wat mensen in de zoekresultaten lezen")
     beter_txt = "\n".join(f"- {z};" if i < len(beter) - 1 else f"- {z}." for i, z in enumerate(beter))
     # alleen beloven wat er echt in zit
     delen = ["uw eigen teksten"]
@@ -72,23 +74,24 @@ def schrijf(map_klant, scan, demo_url, prijs=750, maand=15, punt=None, afzender=
         delen.append("logo")
     eigen = delen[0] if len(delen) == 1 else ", ".join(delen[:-1]) + " en " + delen[-1]
     onderwerp = f"Voorbeeld van een nieuwe website voor {naam}"
+    zoek = f" Toen ik naar {BRANCHE_WOORD.get(c.get('branche'), 'bedrijven')} rond {plaats} keek, kwam ik uw website tegen." if plaats else f" Toen ik naar {BRANCHE_WOORD.get(c.get('branche'), 'bedrijven')} keek, kwam ik uw website tegen."
+    # Prijs (Tim, 22-10): alleen eenmalig, geen maandbedrag. --maand wordt niet meer gebruikt.
     tekst = f"""Beste heer/mevrouw,
 
-{afzender['intro']} Ik kwam de website van {naam} tegen{f" toen ik naar {BRANCHE_WOORD.get(c.get('branche'), 'bedrijven')} rond {plaats} keek" if plaats else ''}, en ik zag een paar dingen die u waarschijnlijk klanten kosten:
+{afzender['intro']}{zoek}
 
-{opsomming}
-
-In plaats van dat alleen te vertellen heb ik een voorbeeld gemaakt van hoe uw site er nu uit zou kunnen zien, met {eigen}:
+{eigen[0].upper() + eigen[1:]} zijn een mooie basis. Ik was benieuwd hoe dat eruit zou zien in een nieuw jasje, dus ik heb alvast een voorbeeld gemaakt:
 
 {demo_url}
 
-Het is een voorstel, geen kopie: er staat nog een balkje op dat het een voorbeeld is, en de teksten over de diensten zijn een eerste opzet die we samen aanpassen. Wat er concreet beter is:
-
+Wat u erin terugziet:
 {beter_txt}
 
-Wat het kost: € {prijs} eenmalig voor de complete site, en € {maand} per maand voor hosting, back-ups en kleine wijzigingen (die stuurt u gewoon per mail of app). Ter vergelijking: freelancers rekenen voor een eenvoudige zakelijke site doorgaans € 800 tot € 4.000 en bureaus € 1.500 tot € 5.000, met onderhoud vanaf € 50 per maand. Ik zit daar bewust onder omdat ik mijn eerste opdrachten aan het opbouwen ben. Het domein blijft op uw naam en u krijgt de bestanden mee als u dat wilt, dus u zit nergens aan vast.
+Het is een eerste opzet (er staat nog een balkje op dat het een voorbeeld is), en de teksten over uw diensten passen we samen aan.
 
-Heeft u er geen behoefte aan, laat het dan even weten — dan hoort u niets meer van mij. Wilt u het voorbeeld liever eerst rustig bekijken, dan hoor ik het graag als ik u ergens mee kan helpen.
+Wat het kost: € {prijs} eenmalig voor de complete site. U krijgt alle bestanden mee. Met die bouwprijs zit ik onder wat freelancers (€ 800 tot € 4.000) en bureaus (€ 1.500 tot € 5.000) meestal rekenen, omdat ik mijn eerste opdrachten aan het opbouwen ben. U betaalt pas na oplevering en het domein blijft op uw naam.
+
+Ik ben benieuwd wat u ervan vindt. U kunt gewoon op deze mail reageren. En heeft u er geen behoefte aan, laat het dan even weten, dan hoort u niets meer van mij.
 
 Met vriendelijke groet,
 
