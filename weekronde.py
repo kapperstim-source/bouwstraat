@@ -284,11 +284,11 @@ def ronde(a):
         concepten.append({
             "domein": s["domein"], "bedrijf": c["naam"], "plaats": (c.get("adres") or {}).get("plaats"), "branche": s["branche"],
             "score": s["score"], "belang": s.get("belang") or [], "aan": mm.get("aan"), "onderwerp": mm["onderwerp"], "tekst": mm["tekst"],
-            "demo": uit["demo"], "punten": mm["punten"], "aandacht": aandacht, "map": uit["map"],
+            "html": mm.get("html", ""), "demo": mm.get("demo") or uit["demo"], "demo_bron": uit["demo"], "punten": mm["punten"], "aandacht": aandacht, "map": uit["map"],
             "screenshot": os.path.join(uit["map"], "screens", "index-mobiel.png"), "seconden": uit["stappen"]["seconden"],
         })
         adm["prospects"][s["domein"]] = {"naam": c["naam"], "email": mm.get("aan"), "branche": s["branche"], "score": s["score"],
-                                        "status": "concept", "datum": VANDAAG, "demo": uit["demo"], "onderwerp": mm["onderwerp"]}
+                                        "status": "concept", "datum": VANDAAG, "demo": mm.get("demo") or uit["demo"], "onderwerp": mm["onderwerp"]}
     # 3. wegschrijven
     signal.alarm(0)
     adm["stand"]["laatste_ronde"] = VANDAAG
